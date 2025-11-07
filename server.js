@@ -336,24 +336,47 @@ const caseInsensitiveSearch = (query) => {
   };
 };
 
-// ==================== AUTHENTICATION ROUTES ====================
+// ==================== DEBUG MIDDLEWARE ====================
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  if (req.body && Object.keys(req.body).length > 0) {
+    console.log('Body:', JSON.stringify(req.body));
+  }
+  next();
+});
+
+
+// ==================== IMPROVED AUTHENTICATION ROUTES ====================
 
 app.post('/api/auth/login', async (req, res) => {
   try {
+    console.log('Login attempt:', req.body);
+    
     const { username, password } = req.body;
 
     if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password required' });
+      return res.status(400).json({ 
+        success: false,
+        error: 'Username and password required' 
+      });
     }
 
     const admin = await Admin.findOne({ username });
     if (!admin) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      console.log('Admin not found:', username);
+      return res.status(401).json({ 
+        success: false,
+        error: 'Invalid credentials' 
+      });
     }
 
     const isValidPassword = await bcrypt.compare(password, admin.password);
     if (!isValidPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      console.log('Invalid password for:', username);
+      return res.status(401).json({ 
+        success: false,
+        error: 'Invalid credentials' 
+      });
     }
 
     const token = jwt.sign(
@@ -362,7 +385,10 @@ app.post('/api/auth/login', async (req, res) => {
       { expiresIn: '24h' }
     );
 
+    console.log('Login successful for:', username);
+    
     res.json({ 
+      success: true,
       token, 
       admin: { 
         id: admin._id, 
@@ -372,43 +398,28 @@ app.post('/api/auth/login', async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Server error during login' });
-  }
-});
-
-app.post('/api/auth/register', async (req, res) => {
-  try {
-    const { username, password, email } = req.body;
-
-    if (!username || !password || !email) {
-      return res.status(400).json({ error: 'All fields required' });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters long' });
-    }
-
-    const existingAdmin = await Admin.findOne({ 
-      $or: [{ username }, { email }] 
+    res.status(500).json({ 
+      success: false,
+      error: 'Server error during login' 
     });
-    
-    if (existingAdmin) {
-      return res.status(409).json({ error: 'Admin with this username or email already exists' });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 12);
-    const admin = new Admin({ username, password: hashedPassword, email });
-    await admin.save();
-
-    res.status(201).json({ message: 'Admin registered successfully' });
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Server error during registration' });
   }
 });
 
 app.get('/api/auth/verify', authenticateToken, (req, res) => {
-  res.json({ valid: true, user: req.user });
+  res.json({ 
+    success: true,
+    valid: true, 
+    user: req.user 
+  });
+});
+
+// Add a test endpoint to check if auth routes are working
+app.get('/api/auth/test', (req, res) => {
+  res.json({ 
+    success: true,
+    message: 'Auth routes are working!',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // ==================== PRODUCT ROUTES ====================
