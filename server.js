@@ -1,4 +1,4 @@
-﻿// server.js - Enhanced with Monthly Revenue, PDF Export, Stock Deduction, and Real-time Stats
+﻿// server.js - MERGED & OPTIMIZED FOR RAILWAY WITH ENHANCED FEATURES
 import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
@@ -12,6 +12,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import fs from 'fs';
 import path from 'path';
+import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -20,9 +21,9 @@ const __dirname = dirname(__filename);
 dotenv.config();
 
 const app = express();
-
 const PORT = process.env.PORT || 5000;
 
+// FIX: Better memory management for Railway
 app.set('trust proxy', 1);
 
 // Create uploads directory if it doesn't exist
@@ -31,36 +32,33 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-
-
-
+// Enhanced compression for Railway
+app.use(compression({
+  level: 6,
+  threshold: 1024
+}));
 
 // Middleware
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true
 }));
-app.use(morgan('combined'));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(morgan('tiny')); // Use 'tiny' instead of 'combined' to save resources
+app.use(express.json({ limit: '10mb' })); // Reduced from 50mb
+app.use(express.urlencoded({ extended: true, limit: '10mb' })); // Reduced from 50mb
 app.use('/uploads', express.static(uploadsDir));
 
-// Rate limiting - FIXED for Railway
+// STRICT Rate limiting for Railway free tier
 const limiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute window
-  max: process.env.NODE_ENV === 'production' ? 500 : 100000,
+  max: 100, // STRICTLY limited for free tier
   message: { error: 'Too many requests from this IP, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-if (process.env.NODE_ENV === 'production') {
-  app.use('/api/', limiter);
-  console.log('⚠️  Rate limiting enabled for production');
-} else {
-  console.log('✅ Rate limiting disabled for development');
-}
-
+app.use('/api/', limiter);
+console.log('⚠️  Strict rate limiting enabled (100 requests/min)');
 
 // Cloudinary Configuration
 if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
@@ -74,13 +72,13 @@ if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && proce
   console.log('⚠️ Cloudinary not configured - using local storage');
 }
 
-// Multer configuration
+// Multer configuration with smaller limits
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage,
   limits: { 
-    fileSize: 10 * 1024 * 1024,
-    files: 8
+    fileSize: 5 * 1024 * 1024, // Reduced from 10MB to 5MB
+    files: 4 // Reduced from 8 to 4
   },
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
@@ -91,13 +89,17 @@ const upload = multer({
   }
 });
 
-// MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/rightyway-aso-oke')
-  .then(() => console.log('✅ MongoDB connected'))
-  .catch(err => {
-    console.error('❌ MongoDB connection error:', err);
-    process.exit(1);
-  });
+// MongoDB Connection with optimized settings
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/rightyway-aso-oke', {
+  maxPoolSize: 10, // Limit connection pool
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
+})
+.then(() => console.log('✅ MongoDB connected with optimized settings'))
+.catch(err => {
+  console.error('❌ MongoDB connection error:', err);
+  process.exit(1);
+});
 
 // Mongoose Schemas
 const productSchema = new mongoose.Schema({
@@ -359,7 +361,6 @@ app.use((req, res, next) => {
   next();
 });
 
-
 // ==================== IMPROVED AUTHENTICATION ROUTES ====================
 
 app.post('/api/auth/login', async (req, res) => {
@@ -436,11 +437,11 @@ app.get('/api/auth/test', (req, res) => {
   });
 });
 
-// ==================== PRODUCT ROUTES ====================
+// ==================== OPTIMIZED PRODUCT ROUTES ====================
 
 app.get('/api/products', async (req, res) => {
   try {
-    const { category, featured, inStock, search, page = 1, limit = 50 } = req.query;
+    const { category, featured, inStock, search, page = 1, limit = 12 } = req.query; // Reduced default limit
     const filter = {};
 
     if (category) filter.category = new RegExp(category, 'i');
@@ -452,17 +453,19 @@ app.get('/api/products', async (req, res) => {
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
+    // Optimized query with field selection and smaller limit
     const [products, total] = await Promise.all([
       Product.find(filter)
+        .select('name description price price_ngn category images stock inStock featured')
         .sort({ createdAt: -1 })
-        .limit(parseInt(limit))
+        .limit(Math.min(parseInt(limit), 20)) // Max 20 items
         .skip(skip)
-        .lean(),
-      Product.countDocuments(filter)
+        .lean()
+        .maxTimeMS(10000), // Timeout after 10 seconds
+      Product.countDocuments(filter).maxTimeMS(5000)
     ]);
 
-    res.set('Cache-Control', 'public, max-age=300');
-    
+    res.set('Cache-Control', 'public, max-age=60'); // Shorter cache
     res.json({
       products,
       pagination: {
@@ -480,12 +483,16 @@ app.get('/api/products', async (req, res) => {
 
 app.get('/api/products/:id', async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id).lean();
+    const product = await Product.findById(req.params.id)
+      .select('name description price price_ngn category images colors inStock featured tags stock')
+      .lean()
+      .maxTimeMS(5000);
+    
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
     
-    res.set('Cache-Control', 'public, max-age=300');
+    res.set('Cache-Control', 'public, max-age=60');
     res.json(product);
   } catch (error) {
     console.error('Error fetching product:', error);
@@ -493,7 +500,7 @@ app.get('/api/products/:id', async (req, res) => {
   }
 });
 
-app.post('/api/products', authenticateToken, upload.array('images', 8), async (req, res) => {
+app.post('/api/products', authenticateToken, upload.array('images', 4), async (req, res) => { // Reduced from 8 to 4
   try {
     const { name, description, price, category, colors, inStock, featured, tags, stock } = req.body;
 
@@ -534,7 +541,7 @@ app.post('/api/products', authenticateToken, upload.array('images', 8), async (r
   }
 });
 
-app.put('/api/products/:id', authenticateToken, upload.array('images', 8), async (req, res) => {
+app.put('/api/products/:id', authenticateToken, upload.array('images', 4), async (req, res) => { // Reduced from 8 to 4
   try {
     const { name, description, price, category, colors, inStock, featured, tags, stock, existingImages } = req.body;
 
@@ -647,11 +654,11 @@ app.put('/api/products/:id/stock', authenticateToken, async (req, res) => {
   }
 });
 
-// ==================== ORDER ROUTES WITH AUTOMATION ====================
+// ==================== ENHANCED ORDER ROUTES WITH AUTOMATION ====================
 
 app.get('/api/orders', authenticateToken, async (req, res) => {
   try {
-    const { status, page = 1, limit = 20, search } = req.query;
+    const { status, page = 1, limit = 15, search } = req.query; // Reduced default limit
     const filter = {};
     
     if (status && status !== 'all') {
@@ -672,10 +679,11 @@ app.get('/api/orders', authenticateToken, async (req, res) => {
       Order.find(filter)
         .populate('items.product', 'name images')
         .sort({ createdAt: -1 })
-        .limit(parseInt(limit))
+        .limit(Math.min(parseInt(limit), 30)) // Max 30 items
         .skip(skip)
-        .lean(),
-      Order.countDocuments(filter)
+        .lean()
+        .maxTimeMS(10000),
+      Order.countDocuments(filter).maxTimeMS(5000)
     ]);
 
     res.json({
@@ -693,7 +701,7 @@ app.get('/api/orders', authenticateToken, async (req, res) => {
   }
 });
 
-// Monthly Revenue Endpoint
+// Monthly Revenue Endpoint - OPTIMIZED
 app.get('/api/orders/monthly-revenue', authenticateToken, async (req, res) => {
   try {
     const monthlyRevenue = await Order.aggregate([
@@ -718,7 +726,7 @@ app.get('/api/orders/monthly-revenue', authenticateToken, async (req, res) => {
       {
         $limit: 12 // Last 12 months
       }
-    ]);
+    ]).maxTimeMS(10000);
 
     res.json(monthlyRevenue);
   } catch (error) {
@@ -727,7 +735,7 @@ app.get('/api/orders/monthly-revenue', authenticateToken, async (req, res) => {
   }
 });
 
-// Revenue Export Endpoint
+// Revenue Export Endpoint - OPTIMIZED
 app.get('/api/orders/revenue-export', authenticateToken, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
@@ -751,7 +759,9 @@ app.get('/api/orders/revenue-export', authenticateToken, async (req, res) => {
     })
     .select('orderNumber customer createdAt status total items')
     .sort({ createdAt: -1 })
-    .lean();
+    .limit(500) // Limit export to 500 orders
+    .lean()
+    .maxTimeMS(15000);
 
     const totalRevenue = orders.reduce((sum, order) => sum + order.total, 0);
     const totalOrders = orders.length;
@@ -778,7 +788,8 @@ app.get('/api/orders/revenue-export', authenticateToken, async (req, res) => {
 app.get('/api/orders/:id', authenticateToken, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
-      .populate('items.product', 'name images colors');
+      .populate('items.product', 'name images colors')
+      .maxTimeMS(5000);
     
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
@@ -833,7 +844,7 @@ app.post('/api/orders', async (req, res) => {
   }
 });
 
-// ENHANCED: Manual order with stock deduction
+// ENHANCED: Manual order with stock deduction - OPTIMIZED
 app.post('/api/orders/manual', authenticateToken, async (req, res) => {
   try {
     const { customer, items, shippingFee, shippingMethod, notes } = req.body;
@@ -861,7 +872,7 @@ app.post('/api/orders/manual', authenticateToken, async (req, res) => {
     const stockUpdates = [];
     for (const item of items) {
       if (item.product) {
-        const product = await Product.findById(item.product);
+        const product = await Product.findById(item.product).maxTimeMS(5000);
         if (!product) {
           return res.status(404).json({ error: `Product not found: ${item.productName}` });
         }
@@ -936,7 +947,7 @@ app.put('/api/orders/:id/status', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Status is required' });
     }
 
-    const order = await Order.findById(req.params.id);
+    const order = await Order.findById(req.params.id).maxTimeMS(5000);
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
@@ -999,7 +1010,7 @@ app.put('/api/orders/:id/payment', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Payment status is required' });
     }
 
-    const order = await Order.findById(req.params.id);
+    const order = await Order.findById(req.params.id).maxTimeMS(5000);
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
@@ -1022,8 +1033,7 @@ app.put('/api/orders/:id/payment', authenticateToken, async (req, res) => {
   }
 });
 
-// ==================== IMPROVED ORDER STATS ENDPOINT ====================
-// FIXED: Sales history now counts both shipped AND delivered orders
+// ==================== IMPROVED ORDER STATS ENDPOINT - OPTIMIZED ====================
 app.get('/api/orders-stats', authenticateToken, async (req, res) => {
   try {
     const [
@@ -1036,13 +1046,13 @@ app.get('/api/orders-stats', authenticateToken, async (req, res) => {
       shippedOrders
     ] = await Promise.all([
       // Total orders count
-      Order.countDocuments(),
+      Order.countDocuments().maxTimeMS(5000),
       
       // Pending orders (pending + confirmed)
-      Order.countDocuments({ status: { $in: ['pending', 'confirmed'] } }),
+      Order.countDocuments({ status: { $in: ['pending', 'confirmed'] } }).maxTimeMS(5000),
       
       // Completed/Delivered orders
-      Order.countDocuments({ status: 'delivered' }),
+      Order.countDocuments({ status: 'delivered' }).maxTimeMS(5000),
       
       // Total revenue from delivered orders
       Order.aggregate([
@@ -1058,18 +1068,18 @@ app.get('/api/orders-stats', authenticateToken, async (req, res) => {
             total: { $sum: '$total' } 
           } 
         }
-      ]),
+      ]).maxTimeMS(5000),
       
       // FIXED: Sales history - all orders that have been shipped OR delivered
       Order.countDocuments({ 
         status: { $in: ['shipped', 'delivered'] }
-      }),
+      }).maxTimeMS(5000),
       
       // Processing orders
-      Order.countDocuments({ status: 'processing' }),
+      Order.countDocuments({ status: 'processing' }).maxTimeMS(5000),
       
       // Shipped orders
-      Order.countDocuments({ status: 'shipped' })
+      Order.countDocuments({ status: 'shipped' }).maxTimeMS(5000)
     ]);
     
     const totalRevenue = revenueResult.length > 0 ? revenueResult[0].total : 0;
@@ -1108,7 +1118,9 @@ app.get('/api/orders-sales', authenticateToken, async (req, res) => {
     })
     .populate('items.product', 'name images')
     .sort({ updatedAt: -1 })
-    .limit(100);
+    .limit(50) // Reduced from 100 to 50
+    .lean()
+    .maxTimeMS(10000);
 
     res.json(sales);
   } catch (error) {
@@ -1122,7 +1134,8 @@ app.get('/api/track/:trackingNumber', async (req, res) => {
     const { trackingNumber } = req.params;
     
     const order = await Order.findOne({ trackingNumber })
-      .populate('items.product', 'name images');
+      .populate('items.product', 'name images')
+      .maxTimeMS(5000);
     
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
@@ -1174,6 +1187,17 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Add memory usage monitoring
+setInterval(() => {
+  const used = process.memoryUsage();
+  console.log('Memory usage:', {
+    rss: `${Math.round(used.rss / 1024 / 1024)} MB`,
+    heapTotal: `${Math.round(used.heapTotal / 1024 / 1024)} MB`,
+    heapUsed: `${Math.round(used.heapUsed / 1024 / 1024)} MB`,
+    external: `${Math.round(used.external / 1024 / 1024)} MB`
+  });
+}, 30000); // Log every 30 seconds
+
 app.use('/api/*', (req, res) => {
   res.status(404).json({ error: 'API endpoint not found' });
 });
@@ -1183,10 +1207,10 @@ app.use((err, req, res, next) => {
   
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'File too large. Maximum size is 10MB.' });
+      return res.status(400).json({ error: 'File too large. Maximum size is 5MB.' }); // Updated to 5MB
     }
     if (err.code === 'LIMIT_FILE_COUNT') {
-      return res.status(400).json({ error: 'Too many files. Maximum is 8 files.' });
+      return res.status(400).json({ error: 'Too many files. Maximum is 4 files.' }); // Updated to 4 files
     }
   }
   
@@ -1204,13 +1228,14 @@ process.on('SIGTERM', async () => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT} (Optimized for Railway)`);
   console.log(`📡 API available at http://localhost:${PORT}/api`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log('💾 Memory optimized for Railway free tier');
   console.log('✅ Automatic payment status updates enabled');
   console.log('✅ Order status flow validation enabled');
   console.log('✅ Monthly revenue tracking enabled');
-  console.log('✅ Revenue PDF export enabled');
+  console.log('✅ Revenue export enabled');
   console.log('✅ Automatic stock deduction enabled');
   console.log('✅ Real-time sales history tracking enabled');
 });
