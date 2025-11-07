@@ -51,7 +51,7 @@ app.use('/uploads', express.static(uploadsDir));
 // STRICT Rate limiting for Railway free tier
 const limiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute window
-  max: 100, // STRICTLY limited for free tier
+  max: 1000, // Increased for development
   message: { error: 'Too many requests from this IP, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -461,8 +461,8 @@ app.get('/api/products', async (req, res) => {
         .limit(Math.min(parseInt(limit), 20)) // Max 20 items
         .skip(skip)
         .lean()
-        .maxTimeMS(10000), // Timeout after 10 seconds
-      Product.countDocuments(filter).maxTimeMS(5000)
+        , // Timeout after 10 seconds
+      Product.countDocuments(filter)
     ]);
 
     res.set('Cache-Control', 'public, max-age=60'); // Shorter cache
@@ -486,7 +486,7 @@ app.get('/api/products/:id', async (req, res) => {
     const product = await Product.findById(req.params.id)
       .select('name description price price_ngn category images colors inStock featured tags stock')
       .lean()
-      .maxTimeMS(5000);
+      ;
     
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
@@ -682,8 +682,8 @@ app.get('/api/orders', authenticateToken, async (req, res) => {
         .limit(Math.min(parseInt(limit), 30)) // Max 30 items
         .skip(skip)
         .lean()
-        .maxTimeMS(10000),
-      Order.countDocuments(filter).maxTimeMS(5000)
+        ,
+      Order.countDocuments(filter)
     ]);
 
     res.json({
@@ -726,7 +726,7 @@ app.get('/api/orders/monthly-revenue', authenticateToken, async (req, res) => {
       {
         $limit: 12 // Last 12 months
       }
-    ]).maxTimeMS(10000);
+    ]);
 
     res.json(monthlyRevenue);
   } catch (error) {
@@ -761,7 +761,7 @@ app.get('/api/orders/revenue-export', authenticateToken, async (req, res) => {
     .sort({ createdAt: -1 })
     .limit(500) // Limit export to 500 orders
     .lean()
-    .maxTimeMS(15000);
+    ;
 
     const totalRevenue = orders.reduce((sum, order) => sum + order.total, 0);
     const totalOrders = orders.length;
@@ -789,7 +789,7 @@ app.get('/api/orders/:id', authenticateToken, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
       .populate('items.product', 'name images colors')
-      .maxTimeMS(5000);
+      ;
     
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
@@ -872,7 +872,7 @@ app.post('/api/orders/manual', authenticateToken, async (req, res) => {
     const stockUpdates = [];
     for (const item of items) {
       if (item.product) {
-        const product = await Product.findById(item.product).maxTimeMS(5000);
+        const product = await Product.findById(item.product);
         if (!product) {
           return res.status(404).json({ error: `Product not found: ${item.productName}` });
         }
@@ -947,7 +947,7 @@ app.put('/api/orders/:id/status', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Status is required' });
     }
 
-    const order = await Order.findById(req.params.id).maxTimeMS(5000);
+    const order = await Order.findById(req.params.id);
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
@@ -1010,7 +1010,7 @@ app.put('/api/orders/:id/payment', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Payment status is required' });
     }
 
-    const order = await Order.findById(req.params.id).maxTimeMS(5000);
+    const order = await Order.findById(req.params.id);
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
@@ -1046,13 +1046,13 @@ app.get('/api/orders-stats', authenticateToken, async (req, res) => {
       shippedOrders
     ] = await Promise.all([
       // Total orders count
-      Order.countDocuments().maxTimeMS(5000),
+      Order.countDocuments(),
       
       // Pending orders (pending + confirmed)
-      Order.countDocuments({ status: { $in: ['pending', 'confirmed'] } }).maxTimeMS(5000),
+      Order.countDocuments({ status: { $in: ['pending', 'confirmed'] } }),
       
       // Completed/Delivered orders
-      Order.countDocuments({ status: 'delivered' }).maxTimeMS(5000),
+      Order.countDocuments({ status: 'delivered' }),
       
       // Total revenue from delivered orders
       Order.aggregate([
@@ -1068,18 +1068,18 @@ app.get('/api/orders-stats', authenticateToken, async (req, res) => {
             total: { $sum: '$total' } 
           } 
         }
-      ]).maxTimeMS(5000),
+      ]),
       
       // FIXED: Sales history - all orders that have been shipped OR delivered
       Order.countDocuments({ 
         status: { $in: ['shipped', 'delivered'] }
-      }).maxTimeMS(5000),
+      }),
       
       // Processing orders
-      Order.countDocuments({ status: 'processing' }).maxTimeMS(5000),
+      Order.countDocuments({ status: 'processing' }),
       
       // Shipped orders
-      Order.countDocuments({ status: 'shipped' }).maxTimeMS(5000)
+      Order.countDocuments({ status: 'shipped' })
     ]);
     
     const totalRevenue = revenueResult.length > 0 ? revenueResult[0].total : 0;
@@ -1120,7 +1120,7 @@ app.get('/api/orders-sales', authenticateToken, async (req, res) => {
     .sort({ updatedAt: -1 })
     .limit(50) // Reduced from 100 to 50
     .lean()
-    .maxTimeMS(10000);
+    ;
 
     res.json(sales);
   } catch (error) {
@@ -1135,7 +1135,7 @@ app.get('/api/track/:trackingNumber', async (req, res) => {
     
     const order = await Order.findOne({ trackingNumber })
       .populate('items.product', 'name images')
-      .maxTimeMS(5000);
+      ;
     
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
@@ -1239,3 +1239,4 @@ app.listen(PORT, () => {
   console.log('✅ Automatic stock deduction enabled');
   console.log('✅ Real-time sales history tracking enabled');
 });
+
