@@ -20,13 +20,20 @@ const __dirname = dirname(__filename);
 dotenv.config();
 
 const app = express();
+
 const PORT = process.env.PORT || 5000;
+
+app.set('trust proxy', 1);
 
 // Create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
+
+
+
+
 
 // Middleware
 app.use(cors({
@@ -38,26 +45,22 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/uploads', express.static(uploadsDir));
 
-// Rate limiting - DISABLED FOR DEVELOPMENT
+// Rate limiting - FIXED for Railway
 const limiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute window
-  max: process.env.NODE_ENV === 'production' ? 500 : 100000, // Very high limit for development
+  max: process.env.NODE_ENV === 'production' ? 500 : 100000,
   message: { error: 'Too many requests from this IP, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => {
-    // Skip rate limiting in development mode
-    return process.env.NODE_ENV !== 'production';
-  }
 });
 
-// Only apply rate limiter in production
 if (process.env.NODE_ENV === 'production') {
   app.use('/api/', limiter);
   console.log('⚠️  Rate limiting enabled for production');
 } else {
   console.log('✅ Rate limiting disabled for development');
 }
+
 
 // Cloudinary Configuration
 if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
@@ -251,14 +254,25 @@ const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
+  console.log('🔐 Token verification attempt:', {
+    path: req.path,
+    hasAuthHeader: !!authHeader,
+    hasToken: !!token,
+    authHeader: authHeader ? 'Present' : 'Missing'
+  });
+
   if (!token) {
+    console.log('❌ No token provided for:', req.path);
     return res.status(401).json({ error: 'Access token required' });
   }
 
   jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret', (err, user) => {
     if (err) {
+      console.log('❌ Token verification failed:', err.message);
       return res.status(403).json({ error: 'Invalid or expired token' });
     }
+    
+    console.log('✅ Token verified for user:', user.username);
     req.user = user;
     next();
   });
