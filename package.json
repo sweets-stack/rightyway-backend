@@ -1,38 +1,38 @@
-﻿{
-    "scripts":  {
-                    "seed":  "node scripts/seedAdmin.js",
-                    "dev":  "nodemon server.js",
-                    "start":  "node server.js"
-                },
-    "description":  "Backend API for Rightyway Aso-Oke E-commerce Platform",
-    "type":  "module",
-    "version":  "1.0.0",
-    "author":  "",
-    "engines":  {
-                    "node":  "\u003e=18.0.0"
-                },
-    "name":  "rightyway-aso-oke-backend",
-    "main":  "server.js",
-    "dependencies":  {
-                         "bcryptjs":  "^2.4.3",
-                         "compression":  "^1.7.4",
-                         "cloudinary":  "^1.41.0",
-                         "express-rate-limit":  "^7.1.5",
-                         "multer":  "^1.4.5-lts.1",
-                         "express":  "^4.18.2",
-                         "dotenv":  "^16.3.1",
-                         "cors":  "^2.8.5",
-                         "mongoose":  "^8.0.3",
-                         "jsonwebtoken":  "^9.0.2",
-                         "morgan":  "^1.10.0"
-                     },
-    "devDependencies":  {
-                            "nodemon":  "^3.0.2"
-                        },
-    "license":  "MIT",
-    "keywords":  [
-                     "ecommerce",
-                     "api",
-                     "aso-oke"
-                 ]
+{
+  "name": "rightyway-aso-oke-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Rightyway Aso-Oke E-commerce Platform",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "seed": "node scripts/seedAdmin.js"
+  },
+  "keywords": [
+    "ecommerce",
+    "api",
+    "aso-oke"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "mongoose": "^8.0.3",
+    "cors": "^2.8.5",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "dotenv": "^16.3.1",
+    "multer": "^1.4.5-lts.1",
+    "morgan": "^1.10.0",
+    "cloudinary": "^1.41.0",
+    "compression": "^1.7.4",
+    "express-rate-limit": "^7.1.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }
