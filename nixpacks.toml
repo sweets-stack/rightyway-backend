@@ -1,0 +1,11 @@
+﻿[phases.setup]
+cmds = ["npm install"]
+
+[phases.build]
+cmds = ["echo 'Building Rightyway Backend...'"]
+
+[start]
+cmd = "node server.js"
+
+[environment]
+NODE_ENV = "production"
